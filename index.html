@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Art - Interactive Image Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://unpkg.com/ccapture.js@1.1.0/build/CCapture.all.min.js"></script> {/* Add CCapture.js */}
+    <style>
+        body {
+            margin: 0;
+            /* overflow: hidden; */ /* Allow body to scroll if content exceeds viewport, appContainer handles main scroll */
+            background-color: #111827; /* bg-gray-900 */
+            color: #f3f4f6; /* text-gray-100 */
+            min-height: 100vh;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; } /* bg-gray-800 */
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; } /* bg-gray-600 */
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; } /* bg-gray-500 */
+
+        /* Slider Thumb Styling */
+        input[type="range"].custom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #e5e7eb; /* gray-200 for good contrast */
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -5px; /* (track_height (8px) - thumb_height (16px)) / 2 */
+            border: 1px solid #4b5563; /* gray-600 border for definition */
+        }
+        input[type="range"].custom-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #e5e7eb; /* gray-200 */
+            border-radius: 50%;
+            cursor: pointer;
+            border: 1px solid #4b5563; /* gray-600 border */
+        }
+         input[type="range"].custom-slider::-ms-thumb { /* For IE/Edge if needed */
+            width: 16px;
+            height: 16px;
+            background: #e5e7eb;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 1px solid #4b5563;
+        }
+
+
+        select option {
+            background-color: #374151; /* bg-gray-700 */
+            color: #f3f4f6; /* text-gray-100 */
+        }
+
+        /* Removed old #threeCanvasContainer fixed positioning */
+        /* #threeCanvasContainer {
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        } */
+
+        /* Ensure canvas fills its new container */
+        #threeCanvasContainer canvas {
+            display: block; /* remove extra space below canvas */
+            width: 100% !important; /* Override three.js inline styles if necessary */
+            height: 100% !important;
+        }
+
+        /* Controls visibility for mobile */
+        .controls-hidden-mobile {
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            overflow: hidden !important;
+            border: none !important;
+        }
+        
+        @media (min-width: 1024px) { /* lg breakpoint */
+            .controls-hidden-mobile { /* Reset for desktop if needed, though it's mainly for mobile toggle */
+                max-height: none !important;
+                 /* padding restored by default classes */
+            }
+            #controlsContainerWrapper {
+                position: relative; /* No longer fixed on desktop */
+                max-height: none; /* Allow full height */
+            }
+            #appContainer {
+                padding-top: 0; /* Remove padding if controls are part of the flow */
+            }
+        }
+
+    </style>
+</head>
+<body class="antialiased bg-gray-900 text-gray-100">
+
+    <div id="appContainer" class="flex flex-col h-screen">
+
+        <!-- Controls Toggle Button (Mobile Focus) -->
+        <button id="toggleControlsButton" class="lg:hidden fixed top-3 right-3 z-50 p-2 bg-blue-600 text-white rounded-full shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <svg id="toggleIconOpen" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.646.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 1.655c.007.379.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.333.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 010-1.655c-.007-.379-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <svg id="toggleIconClose" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 hidden">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+
+        <div id="controlsContainerWrapper" class="fixed top-0 left-0 right-0 z-40 lg:relative lg:z-auto bg-gray-900/80 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none shadow-xl lg:shadow-none transition-all duration-300 ease-in-out overflow-y-auto max-h-[90vh] lg:max-h-full controls-hidden-mobile lg:!overflow-y-visible lg:mb-0">
+            <div id="controlsContainer" class="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 p-3 lg:bg-gray-900/80 lg:backdrop-blur-md lg:shadow-xl lg:rounded-b-lg">
+                <!-- Left Section: Title & File Ops -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-shrink-0">
+                    <h1 class="text-xl sm:text-2xl font-semibold text-white whitespace-nowrap">Particle Art</h1>
+                    <label for="fileInput" id="fileInputLabel" class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-md cursor-pointer transition-colors whitespace-nowrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M11.47 2.47a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06l-2.47-2.47V11.25a.75.75 0 0 1-1.5 0V4.81L8.78 7.28a.75.75 0 0 1-1.06-1.06l3.75-3.75ZM12 13.5a.75.75 0 0 1 .75.75V21a.75.75 0 0 1-1.5 0v-6.75A.75.75 0 0 1 12 13.5Z" clip-rule="evenodd" /><path d="M4.125 12.062A8.25 8.25 0 0 0 12 21.75a8.25 8.25 0 0 0 7.875-9.688V12.375a.75.75 0 0 1 1.5 0v-.313A9.75 9.75 0 0 1 12 23.25a9.75 9.75 0 0 1-9.375-9.438v.313a.75.75 0 0 1-1.5 0v-2.062A8.224 8.224 0 0 0 4.125 12Z" /></svg>
+                        Upload Image
+                    </label>
+                    <input type="file" id="fileInput" class="hidden" accept="image/*">
+                </div>
+
+                <!-- Middle Section: Particle Params -->
+                <div class="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-x-4 bg-gray-800/60 p-2 rounded-lg flex-grow min-w-0">
+                    <div class="control-group min-w-[140px] flex-grow">
+                        <label for="imageScaleSlider" class="block text-xs font-medium text-gray-300 mb-1">Image Scale:</label>
+                        <input type="range" id="imageScaleSlider" min="0.1" max="3.0" step="0.05" value="1.0" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer custom-slider accent-blue-500">
+                        <span id="imageScaleValue" class="block text-xs text-gray-400 text-right mt-0.5">1.0x</span>
+                    </div>
+                    <div class="control-group min-w-[140px] flex-grow">
+                        <label for="particleSizeSlider" class="block text-xs font-medium text-gray-300 mb-1">Particle Size:</label>
+                        <input type="range" id="particleSizeSlider" min="0.2" max="8" step="0.1" value="2.0" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer custom-slider accent-blue-500">
+                        <span id="particleSizeValue" class="block text-xs text-gray-400 text-right mt-0.5">2.0</span>
+                    </div>
+                    <div class="control-group min-w-[140px] flex-grow">
+                        <label for="particleDensitySlider" class="block text-xs font-medium text-gray-300 mb-1">Density:</label>
+                        <input type="range" id="particleDensitySlider" min="1" max="5" step="1" value="3" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer custom-slider accent-blue-500">
+                        <span id="particleDensityValue" class="block text-xs text-gray-400 text-right mt-0.5">Medium</span>
+                    </div>
+                    <div class="control-group min-w-[150px] flex-grow">
+                        <label for="particleTypeSelector" class="block text-xs font-medium text-gray-300 mb-1">Effect Type:</label>
+                        <select id="particleTypeSelector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-md focus:ring-blue-500 focus:border-blue-500 block w-full p-1.5">
+                            <option value="points">2D Points</option>
+                            <option value="particleBlock">3D Particle Block</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Section: Actions -->
+                <div class="flex items-center justify-start sm:justify-end gap-3 mt-2 sm:mt-0 flex-shrink-0">
+                    <button id="reassembleButton" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M3.75 12a.75.75 0 0 1 .75-.75h15a.75.75 0 0 1 0 1.5h-15a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /><path fill-rule="evenodd" d="M12 3.75a.75.75 0 0 1 .75.75v15a.75.75 0 0 1-1.5 0v-15a.75.75 0 0 1 .75-.75Z" clip-rule="evenodd" /></svg>
+                        Assemble
+                    </button>
+                    <button id="disassembleButton" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-200 bg-gray-600 hover:bg-gray-700 rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd" /></svg>
+                        Disassemble
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area: Previews -->
+        <main id="mainContent" class="flex-grow flex flex-col lg:flex-row overflow-hidden">
+            <!-- Left Panel: Original Image Preview (Desktop) -->
+            <div id="originalImagePreviewContainer" class="hidden lg:flex lg:w-1/3 xl:w-1/4 bg-gray-800/50 p-4 items-center justify-center overflow-hidden relative shadow-inner">
+                <img id="originalImagePreview" src="#" alt="Original Image" class="max-w-full max-h-full object-contain hidden rounded-md shadow-lg">
+                <p id="originalImagePlaceholder" class="text-gray-500 text-center">Upload an image to see the original here.</p>
+            </div>
+
+            <!-- Right Panel: Three.js Canvas -->
+            <div id="threeCanvasContainer" class="flex-grow h-full w-full lg:w-2/3 xl:w-3/4 relative bg-black">
+            </div>
+        </main>
+
+        <!-- Action Buttons for Download (Desktop Focus) -->
+        <!-- <div id="downloadActions" class="hidden lg:flex fixed bottom-4 right-4 z-20 gap-3">
+            <button id="downloadGifButton" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" /><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" /></svg>
+                GIF
+            </button>
+            <button id="downloadVideoButton" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" /><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" /></svg>
+                Video
+            </button>
+        </div> -->
+    </div>
+
+    <div id="messageBox" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-lg shadow-lg font-medium text-white text-sm hidden"></div>
+    <div id="loadingIndicator" class="fixed inset-0 z-[60] bg-gray-900/70 backdrop-blur-sm flex flex-col items-center justify-center text-lg text-white hidden">
+        <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Processing...
+    </div>
+
+    <script type="module">
+        let scene, camera, renderer, clock;
+        let particlesMesh = null;
+        let particleData = {
+            baseImagePositions: null,
+            randomPositions: null,
+            colors: null,
+            animProps: [],
+            count: 0
+        };
+
+        const MAX_PARTICLES_CAP = 75000;
+        let currentImageScale = 1.0; // New: For overall image size
+        let currentParticleSize = 2.0;
+        let currentDensitySetting = 3;
+        let currentParticleType = 'points';
+
+        const BLOCK_DEPTH_LAYERS = 5;
+        const BLOCK_DEPTH_SPREAD_FACTOR = 1.5; 
+
+        const RANDOM_SPREAD_FACTOR = 800;
+        const ANIMATION_DURATION = 1.8;
+        const ASSEMBLED_DISTORTION_AMOUNT = 0.5;
+        const SUBTLE_ANIM_AMPLITUDE_X = 0.3;
+        const SUBTLE_ANIM_AMPLITUDE_Y = 0.3;
+        const SUBTLE_ANIM_AMPLITUDE_Z = 0.2;
+        const SUBTLE_ANIM_FREQUENCY_MIN = 0.25;
+        const SUBTLE_ANIM_FREQUENCY_MAX = 0.65;
+
+        let isFullyAssembled = false;
+        let currentTween = null;
+        let loadedImageObject = null;
+        let controlsVisibleOnMobile = false; // New state for mobile controls
+
+        let raycaster;
+        let mouse;
+        let hoveredParticleData = { index: -1 }; // Stores index of hovered particle
+
+        // DOM Elements
+        const appContainer = document.getElementById('appContainer');
+        const mainContent = document.getElementById('mainContent');
+        const controlsWrapper = document.getElementById('controlsContainerWrapper');
+        const toggleControlsButton = document.getElementById('toggleControlsButton');
+        const toggleIconOpen = document.getElementById('toggleIconOpen');
+        const toggleIconClose = document.getElementById('toggleIconClose');
+        
+        const originalImagePreview = document.getElementById('originalImagePreview');
+        const originalImagePlaceholder = document.getElementById('originalImagePlaceholder');
+        const downloadGifButton = document.getElementById('downloadGifButton');
+        const downloadVideoButton = document.getElementById('downloadVideoButton');
+
+        const fileInput = document.getElementById('fileInput');
+        const fileInputLabel = document.getElementById('fileInputLabel');
+        const reassembleButton = document.getElementById('reassembleButton');
+        const disassembleButton = document.getElementById('disassembleButton');
+        const messageBox = document.getElementById('messageBox');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const canvasContainer = document.getElementById('threeCanvasContainer');
+
+        const imageScaleSlider = document.getElementById('imageScaleSlider');
+        const imageScaleValue = document.getElementById('imageScaleValue');
+        const particleSizeSlider = document.getElementById('particleSizeSlider');
+        const particleSizeValue = document.getElementById('particleSizeValue');
+        const particleDensitySlider = document.getElementById('particleDensitySlider');
+        const particleDensityValue = document.getElementById('particleDensityValue');
+        const particleTypeSelector = document.getElementById('particleTypeSelector');
+
+        // --- Mobile Controls Toggle ---
+        function setControlsHeightVar() {
+            if (window.innerWidth < 1024) { // lg breakpoint
+                const controlsHeight = controlsWrapper.offsetHeight;
+                mainContent.style.paddingTop = controlsVisibleOnMobile ? `${controlsHeight}px` : '0px';
+                // On mobile, the canvas container might need its height adjusted if controls are overlaid
+                // For now, simple padding on mainContent.
+            } else {
+                mainContent.style.paddingTop = '0px'; // Reset for desktop
+            }
+        }
+
+        function toggleMobileControls() {
+            controlsVisibleOnMobile = !controlsVisibleOnMobile;
+            if (controlsVisibleOnMobile) {
+                controlsWrapper.classList.remove('controls-hidden-mobile');
+                toggleIconOpen.classList.add('hidden');
+                toggleIconClose.classList.remove('hidden');
+            } else {
+                controlsWrapper.classList.add('controls-hidden-mobile');
+                toggleIconOpen.classList.remove('hidden');
+                toggleIconClose.classList.add('hidden');
+            }
+            // Recalculate padding after transition (or immediately if no transition for height)
+            // A small timeout can help if there are CSS transitions on max-height
+            setTimeout(setControlsHeightVar, 50); // Adjust if using long transitions
+        }
+
+        if (toggleControlsButton) { // Ensure button exists
+            toggleControlsButton.addEventListener('click', toggleMobileControls);
+        }
+
+
+        // --- Control Event Listeners ---
+        imageScaleSlider.addEventListener('input', (e) => {
+            currentImageScale = parseFloat(e.target.value);
+            imageScaleValue.textContent = `${currentImageScale.toFixed(2)}x`; // More precision for scale
+        });
+        imageScaleSlider.addEventListener('change', () => {
+            if (loadedImageObject) regenerateVisuals();
+        });
+
+        particleSizeSlider.addEventListener('input', (e) => {
+            currentParticleSize = parseFloat(e.target.value);
+            particleSizeValue.textContent = currentParticleSize.toFixed(1);
+        });
+        particleSizeSlider.addEventListener('change', () => {
+            if (loadedImageObject) regenerateVisuals();
+        });
+
+        const densityLabels = ["V.Low", "Low", "Medium", "High", "V.High"];
+        particleDensitySlider.addEventListener('input', (e) => {
+            currentDensitySetting = parseInt(e.target.value);
+            particleDensityValue.textContent = densityLabels[currentDensitySetting - 1];
+        });
+        particleDensitySlider.addEventListener('change', () => {
+            if (loadedImageObject) regenerateVisuals();
+        });
+
+        particleTypeSelector.addEventListener('change', (e) => {
+            currentParticleType = e.target.value;
+            if (loadedImageObject) regenerateVisuals();
+        });
+
+        function regenerateVisuals() {
+            if (!loadedImageObject) {
+                showMessage("Upload an image first to see changes.", "info", 2000);
+                return;
+            }
+            showLoadingIndicator(true);
+            isFullyAssembled = false;
+            if (currentTween) currentTween.kill();
+
+            setTimeout(() => {
+                processImage(loadedImageObject);
+                showLoadingIndicator(false);
+            }, 50);
+        }
+
+        // --- Three.js Core ---
+        function initThree() {
+            scene = new THREE.Scene();
+            clock = new THREE.Clock();
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Use the dimensions of the new canvasContainer for camera and renderer
+            const containerRect = canvasContainer.getBoundingClientRect();
+            camera = new THREE.PerspectiveCamera(75, containerRect.width / containerRect.height, 0.1, 5000);
+            camera.position.z = 100;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(containerRect.width, containerRect.height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            canvasContainer.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(0.5, 1, 1.5);
+            scene.add(directionalLight);
+            
+            if (renderer && renderer.domElement) {
+                renderer.domElement.addEventListener('mousemove', onCanvasMouseMove, false);
+                renderer.domElement.addEventListener('mouseleave', onCanvasMouseLeave, false);
+            }
+
+            window.addEventListener('resize', onWindowResize, false);
+            animateLoop();
+        }
+
+        function onWindowResize() {
+            // Adjust based on the new parent container for the canvas
+            const containerRect = canvasContainer.getBoundingClientRect();
+            if (containerRect.width > 0 && containerRect.height > 0) {
+                camera.aspect = containerRect.width / containerRect.height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(containerRect.width, containerRect.height);
+            }
+            setControlsHeightVar(); // Adjust padding on main content if controls are visible on mobile
+        }
+
+        function onCanvasMouseMove(event) {
+            if (!particlesMesh || !camera || !canvasContainer || !renderer || !renderer.domElement) return;
+
+            const rect = renderer.domElement.getBoundingClientRect(); // Use renderer's canvas for accurate coords
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.params.Points.threshold = currentParticleSize * 1.5; // Adjust threshold based on particle size
+
+            const intersects = raycaster.intersectObject(particlesMesh, false);
+
+            if (intersects.length > 0) {
+                const intersection = intersects[0];
+                if (intersection.index !== undefined) {
+                    hoveredParticleData.index = intersection.index;
+                } else {
+                    hoveredParticleData.index = -1;
+                }
+            } else {
+                hoveredParticleData.index = -1;
+            }
+        }
+
+        function onCanvasMouseLeave(event) {
+            hoveredParticleData.index = -1;
+        }
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                showLoadingIndicator(true);
+                hideMessage();
+                isFullyAssembled = false;
+                if (currentTween) currentTween.kill();
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const image = new Image();
+                    image.onload = () => {
+                        loadedImageObject = image;
+                        fileInputLabel.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 0v7.5a.75.75 0 0 0 .75.75h13.5a.75.75 0 0 0 .75-.75v-7.5a.75.75 0 0 0-.75-.75H2.5a.75.75 0 0 0-.75.75Zm11.5 1.5a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75V6.75ZM6 12a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5h-6.5A.75.75 0 0 1 6 12Z" clip-rule="evenodd" /></svg> Change Image`;
+                        
+                        // Display original image in preview
+                        if (originalImagePreview && originalImagePlaceholder) {
+                            originalImagePreview.src = e.target.result;
+                            originalImagePreview.classList.remove('hidden');
+                            originalImagePlaceholder.classList.add('hidden');
+                        }
+                        
+                        processImage(image);
+                        showLoadingIndicator(false);
+                        // Enable download buttons (placeholders for now)
+                        if(downloadGifButton) downloadGifButton.disabled = false;
+                        if(downloadVideoButton) downloadVideoButton.disabled = false;
+                    };
+                    image.onerror = () => {
+                        showMessage("Error loading image.", "error");
+                        showLoadingIndicator(false);
+                    }
+                    image.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else if (file) {
+                showMessage("Please upload a valid image file.", "warn");
+            }
+        });
+
+        function processImage(image) {
+            const imgWidth = image.width;
+            const imgHeight = image.height;
+
+            // Update original image preview if not already done by fileInput change
+            if (originalImagePreview && originalImagePreview.src !== image.src) {
+                 if (originalImagePreview.src !== image.src && image.src.startsWith('data:image')) { // Check if it's a data URL
+                    originalImagePreview.src = image.src;
+                    originalImagePreview.classList.remove('hidden');
+                    if(originalImagePlaceholder) originalImagePlaceholder.classList.add('hidden');
+                }
+            }
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = imgWidth;
+            tempCanvas.height = imgHeight;
+            const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(image, 0, 0);
+            
+            let imageData;
+            try { imageData = ctx.getImageData(0, 0, imgWidth, imgHeight); }
+            catch (e) {
+                showMessage("Could not process image: " + e.message, "error");
+                console.error("Error getting ImageData:", e);
+                showLoadingIndicator(false); return;
+            }
+            
+            const data = imageData.data;
+            const tempParticles = [];
+
+            const densityStepMap = { 1: 10, 2: 7, 3: 5, 4: 3, 5: 2 };
+            let baseStep = densityStepMap[currentDensitySetting] || 5;
+            
+            const pixelCount = imgWidth * imgHeight;
+            let particleAmountFactor = (currentParticleType === 'particleBlock' && BLOCK_DEPTH_LAYERS > 0) ? BLOCK_DEPTH_LAYERS : 1;
+            let calculatedMinStep = Math.max(1, Math.ceil(Math.sqrt(pixelCount * particleAmountFactor / MAX_PARTICLES_CAP)));
+            let step = Math.max(baseStep, calculatedMinStep);
+
+            // Scale factor for positions based on particle size and new image scale
+            const positionScaleFactor = (currentParticleSize / 10) * currentImageScale;
+
+            for (let y = 0; y < imgHeight; y += step) {
+                for (let x = 0; x < imgWidth; x += step) {
+                    const index = (y * imgWidth + x) * 4;
+                    const r = data[index] / 255;
+                    const g = data[index + 1] / 255;
+                    const b = data[index + 2] / 255;
+                    const a = data[index + 3] / 255;
+
+                    if (a > 0.15) {
+                        tempParticles.push({
+                            imgX: (x - imgWidth / 2) * positionScaleFactor,
+                            imgY: (-y + imgHeight / 2) * positionScaleFactor,
+                            imgZ: 0,
+                            colorR: r, colorG: g, colorB: b,
+                        });
+                    }
+                }
+            }
+            
+            if (tempParticles.length === 0) {
+                showMessage("No distinct pixels found. Try a different image or density.", "warn");
+                showLoadingIndicator(false); return;
+            }
+
+            const estimatedImageVisualWidth = imgWidth * positionScaleFactor;
+            const estimatedImageVisualHeight = imgHeight * positionScaleFactor;
+            // Adjust camera Z based on the scaled image dimensions AND canvas aspect ratio
+            const canvasRect = canvasContainer.getBoundingClientRect();
+            const canvasAspect = (canvasRect.width > 0 && canvasRect.height > 0) ? canvasRect.width / canvasRect.height : 1;
+            
+            let camZBasedOnWidth = estimatedImageVisualWidth / canvasAspect;
+            let camZBasedOnHeight = estimatedImageVisualHeight;
+            
+            // Basic heuristic for Z distance:
+            // Use a FOV-like calculation: distance = (height / 2) / tan(fov / 2)
+            // For a 75deg FOV (0.65 rad for half FOV), tan(37.5deg) is approx 0.767
+            // So, distance approx (visualHeight / 2) / 0.767 or visualHeight / 1.53
+            // Or simpler: ensure the larger dimension fits with some padding.
+            const effectiveVisualSize = Math.max(estimatedImageVisualWidth / canvasAspect, estimatedImageVisualHeight);
+            camera.position.z = effectiveVisualSize * 1.2 + Math.max(50, currentParticleSize * 10 * currentImageScale);
+
+
+            camera.position.z = Math.max(30, camera.position.z); 
+            camera.position.z = Math.min(4500, camera.position.z); 
+            camera.lookAt(scene.position);
+
+            createParticles(tempParticles);
+        }
+
+        function createParticles(frontFaceParticleData) {
+            if (particlesMesh) {
+                scene.remove(particlesMesh);
+                if (particlesMesh.geometry) particlesMesh.geometry.dispose();
+                if (particlesMesh.material) particlesMesh.material.dispose();
+                particlesMesh = null;
+            }
+
+            let numBaseParticles = frontFaceParticleData.length;
+            
+            if (currentParticleType === 'points') {
+                particleData.count = Math.min(numBaseParticles, MAX_PARTICLES_CAP);
+                 if (numBaseParticles > MAX_PARTICLES_CAP) {
+                    showMessage(`Particle count capped at ${MAX_PARTICLES_CAP} for '2D Points'.`, "info", 3000);
+                }
+            } else { // particleBlock
+                particleData.count = Math.min(numBaseParticles * BLOCK_DEPTH_LAYERS, MAX_PARTICLES_CAP);
+            }
+
+            if (particleData.count === 0) return;
+
+            particleData.baseImagePositions = new Float32Array(particleData.count * 3);
+            particleData.randomPositions = new Float32Array(particleData.count * 3);
+            particleData.colors = new Float32Array(particleData.count * 3);
+            particleData.animProps = [];
+
+            let currentArrIdx = 0; // Actual index into the Float32Arrays
+
+            if (currentParticleType === 'points') {
+                for (let i = 0; i < particleData.count; i++) { // Iterate up to the capped count
+                    const p = frontFaceParticleData[i];
+                    const pIdx = currentArrIdx * 3;
+                    const distortionX = (Math.random() - 0.5) * ASSEMBLED_DISTORTION_AMOUNT * currentImageScale; // Scale distortion
+                    const distortionY = (Math.random() - 0.5) * ASSEMBLED_DISTORTION_AMOUNT * currentImageScale;
+                    const distortionZ = (Math.random() - 0.5) * ASSEMBLED_DISTORTION_AMOUNT * 1.2 * currentImageScale;
+
+                    particleData.baseImagePositions[pIdx]     = p.imgX + distortionX;
+                    particleData.baseImagePositions[pIdx + 1] = p.imgY + distortionY;
+                    particleData.baseImagePositions[pIdx + 2] = p.imgZ + distortionZ;
+                    
+                    particleData.randomPositions[pIdx]     = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR;
+                    particleData.randomPositions[pIdx + 1] = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR;
+                    particleData.randomPositions[pIdx + 2] = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR * (Math.random()*0.4 + 0.1);
+                
+                    particleData.colors[pIdx]     = p.colorR;
+                    particleData.colors[pIdx + 1] = p.colorG;
+                    particleData.colors[pIdx + 2] = p.colorB;
+
+                    particleData.animProps.push({
+                        phaseX: Math.random() * Math.PI * 2, phaseY: Math.random() * Math.PI * 2,
+                        phaseZ: Math.random() * Math.PI * 2,
+                        freq: SUBTLE_ANIM_FREQUENCY_MIN + Math.random() * (SUBTLE_ANIM_FREQUENCY_MAX - SUBTLE_ANIM_FREQUENCY_MIN)
+                    });
+                    currentArrIdx++;
+                }
+            } else { // particleBlock
+                const totalDepth = currentParticleSize * BLOCK_DEPTH_SPREAD_FACTOR * currentImageScale; // Scale depth with image scale
+                let actualLayers = BLOCK_DEPTH_LAYERS;
+                
+                if (numBaseParticles * BLOCK_DEPTH_LAYERS > MAX_PARTICLES_CAP && numBaseParticles > 0) {
+                    actualLayers = Math.floor(MAX_PARTICLES_CAP / numBaseParticles);
+                    actualLayers = Math.max(1, actualLayers);
+                    if (BLOCK_DEPTH_LAYERS > actualLayers) {
+                        showMessage(`Block depth reduced to ${actualLayers} layer(s) (total ${numBaseParticles * actualLayers} particles) to stay within ${MAX_PARTICLES_CAP} cap.`, "info", 4000);
+                    }
+                }
+                particleData.count = numBaseParticles * actualLayers; 
+
+                if (particleData.baseImagePositions.length / 3 !== particleData.count) {
+                    particleData.baseImagePositions = new Float32Array(particleData.count * 3);
+                    particleData.randomPositions = new Float32Array(particleData.count * 3);
+                    particleData.colors = new Float32Array(particleData.count * 3);
+                    // particleData.animProps will be refilled
+                }
+                particleData.animProps = []; // Clear and refill for particleBlock
+
+
+                for (let i = 0; i < numBaseParticles; i++) {
+                    if (currentArrIdx >= particleData.count) break; 
+                    const p = frontFaceParticleData[i];
+                    for (let layer = 0; layer < actualLayers; layer++) {
+                        if (currentArrIdx >= particleData.count) break;
+                        const pIdx = currentArrIdx * 3;
+
+                        const distortionX = (Math.random() - 0.5) * ASSEMBLED_DISTORTION_AMOUNT * 0.5 * currentImageScale;
+                        const distortionY = (Math.random() - 0.5) * ASSEMBLED_DISTORTION_AMOUNT * 0.5 * currentImageScale;
+                        const layerDepthSegment = (actualLayers > 1 ? totalDepth / (actualLayers -1) : totalDepth);
+                        const distortionZLayer = (Math.random() - 0.5) * layerDepthSegment * 0.3;
+
+                        particleData.baseImagePositions[pIdx]     = p.imgX + distortionX;
+                        particleData.baseImagePositions[pIdx + 1] = p.imgY + distortionY;
+                        
+                        const layerZOffset = (actualLayers > 1) ? (layer / (actualLayers -1)) * totalDepth : 0;
+                        particleData.baseImagePositions[pIdx + 2] = p.imgZ - layerZOffset + distortionZLayer;
+
+                        particleData.randomPositions[pIdx]     = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR;
+                        particleData.randomPositions[pIdx + 1] = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR;
+                        particleData.randomPositions[pIdx + 2] = (Math.random() - 0.5) * RANDOM_SPREAD_FACTOR * (Math.random()*0.8 + 0.2);
+                    
+                        particleData.colors[pIdx]     = p.colorR;
+                        particleData.colors[pIdx + 1] = p.colorG;
+                        particleData.colors[pIdx + 2] = p.colorB;
+
+                        particleData.animProps.push({ /* ... as before ... */ 
+                            phaseX: Math.random() * Math.PI * 2, phaseY: Math.random() * Math.PI * 2,
+                            phaseZ: Math.random() * Math.PI * 2,
+                            freq: SUBTLE_ANIM_FREQUENCY_MIN + Math.random() * (SUBTLE_ANIM_FREQUENCY_MAX - SUBTLE_ANIM_FREQUENCY_MIN)
+                        });
+                        currentArrIdx++;
+                    }
+                }
+                particleData.count = currentArrIdx; // Final actual count
+            }
+
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(particleData.randomPositions.slice(0, particleData.count * 3), 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(particleData.colors.slice(0, particleData.count * 3), 3));
+            
+            const material = new THREE.PointsMaterial({
+                size: currentParticleSize,
+                vertexColors: true,
+                sizeAttenuation: true,
+                transparent: true,
+                opacity: (currentParticleType === 'particleBlock' && BLOCK_DEPTH_LAYERS > 1) ? 0.75 : 0.9,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            particlesMesh = new THREE.Points(geometry, material);
+            scene.add(particlesMesh);
+
+            isFullyAssembled = false;
+            animateToImageFormation();
+        }
+
+        function animateParticles(targetPositionsArray, onCompleteCallback) {
+            if (!particlesMesh || particleData.count === 0) return;
+            if (currentTween) currentTween.kill();
+            isFullyAssembled = false;
+
+            const proxy = { progress: 0 };
+            const startPositions = new Float32Array(particlesMesh.geometry.attributes.position.array);
+            const actualTargetPositions = targetPositionsArray.slice(0, particleData.count * 3);
+
+            currentTween = gsap.to(proxy, {
+                progress: 1, duration: ANIMATION_DURATION, ease: "power2.inOut",
+                onUpdate: () => {
+                    const positionsAttribute = particlesMesh.geometry.attributes.position;
+                    for (let i = 0; i < particleData.count; i++) {
+                        const idx = i * 3;
+                        if (idx + 2 >= actualTargetPositions.length || idx + 2 >= startPositions.length) continue;
+
+                        positionsAttribute.array[idx]     = startPositions[idx]     + (actualTargetPositions[idx]     - startPositions[idx])     * proxy.progress;
+                        positionsAttribute.array[idx + 1] = startPositions[idx + 1] + (actualTargetPositions[idx + 1] - startPositions[idx + 1]) * proxy.progress;
+                        positionsAttribute.array[idx + 2] = startPositions[idx + 2] + (actualTargetPositions[idx + 2] - startPositions[idx + 2]) * proxy.progress;
+                    }
+                    positionsAttribute.needsUpdate = true;
+                },
+                onComplete: () => {
+                    currentTween = null;
+                    if (particlesMesh && particlesMesh.geometry) { // Check if mesh still exists
+                        particlesMesh.geometry.attributes.position.array.set(actualTargetPositions);
+                        particlesMesh.geometry.attributes.position.needsUpdate = true;
+                    }
+                    if (onCompleteCallback) onCompleteCallback();
+                }
+            });
+        }
+
+        function animateToImageFormation() {
+            if (!particleData.baseImagePositions || particleData.count === 0) return;
+            animateParticles(particleData.baseImagePositions, () => {
+                isFullyAssembled = true;
+                updateButtonStates(false, true); 
+            });
+            updateButtonStates(false, true);
+        }
+
+        function animateToRandom() {
+            if (!particleData.randomPositions || particleData.count === 0) return;
+            animateParticles(particleData.randomPositions, () => {
+                updateButtonStates(true, false);
+            });
+            updateButtonStates(true, false);
+        }
+        
+        reassembleButton.addEventListener('click', animateToImageFormation);
+        disassembleButton.addEventListener('click', animateToRandom);
+
+        function updateButtonStates(canReassemble, canDisassemble) {
+            if (!loadedImageObject || particleData.count === 0) {
+                reassembleButton.disabled = true;
+                disassembleButton.disabled = true;
+                if(downloadGifButton) downloadGifButton.disabled = true;
+                if(downloadVideoButton) downloadVideoButton.disabled = true;
+                return;
+            }
+            reassembleButton.disabled = !canReassemble;
+            disassembleButton.disabled = !canDisassemble;
+            // Download buttons are enabled once an image is loaded and processed,
+            // their specific state (e.g. during animation) isn't handled here yet.
+            if(downloadGifButton) downloadGifButton.disabled = false; // Or tie to isFullyAssembled etc.
+            if(downloadVideoButton) downloadVideoButton.disabled = false;
+        }
+        
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            const elapsedTime = clock.getElapsedTime();
+            let positionsNeedsUpdate = false;
+
+            if (isFullyAssembled && !currentTween && particlesMesh && particleData.animProps.length === particleData.count && particleData.count > 0) {
+                const positions = particlesMesh.geometry.attributes.position.array;
+                const basePos = particleData.baseImagePositions.slice(0, particleData.count * 3);
+                const ampX = SUBTLE_ANIM_AMPLITUDE_X * currentImageScale;
+                const ampY = SUBTLE_ANIM_AMPLITUDE_Y * currentImageScale;
+                const ampZ = SUBTLE_ANIM_AMPLITUDE_Z * currentImageScale;
+
+                for (let i = 0; i < particleData.count; i++) {
+                    const props = particleData.animProps[i]; const baseIdx = i * 3;
+                    if (baseIdx + 2 >= basePos.length || !props) continue;
+
+                    positions[baseIdx]     = basePos[baseIdx]     + Math.sin(elapsedTime * props.freq + props.phaseX) * ampX;
+                    positions[baseIdx + 1] = basePos[baseIdx + 1] + Math.cos(elapsedTime * props.freq + props.phaseY) * ampY;
+                    positions[baseIdx + 2] = basePos[baseIdx + 2] + Math.sin(elapsedTime * props.freq * 0.75 + props.phaseZ) * ampZ;
+                }
+                positionsNeedsUpdate = true;
+            }
+
+            // Particle Hover Effect (applied on top of any existing animation/static position)
+            if (particlesMesh && hoveredParticleData.index !== -1 && !currentTween) {
+                const positions = particlesMesh.geometry.attributes.position.array;
+                const pIdx = hoveredParticleData.index * 3;
+
+                if (pIdx + 2 < positions.length) { // Ensure index is valid
+                    const hoverAmplitude = currentParticleSize * 0.65; // How much it moves
+                    const hoverFrequency = 12; // Speed of oscillation
+                    // Add an oscillation to the Z position of the hovered particle
+                    positions[pIdx + 2] += Math.sin(elapsedTime * hoverFrequency) * hoverAmplitude;
+                    positionsNeedsUpdate = true;
+                }
+            }
+
+            if (positionsNeedsUpdate && particlesMesh && particlesMesh.geometry) {
+                particlesMesh.geometry.attributes.position.needsUpdate = true;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        let messageTimeout;
+        function showMessage(text, type = "error", duration = 3000) {
+            messageBox.textContent = text;
+            messageBox.classList.remove('bg-red-500', 'bg-green-500', 'bg-blue-500', 'bg-yellow-500', 'bg-gray-700', 'hidden');
+            if (type === "error") messageBox.classList.add('bg-red-500');
+            else if (type === "success") messageBox.classList.add('bg-green-500');
+            else if (type === "info") messageBox.classList.add('bg-blue-500');
+            else if (type === "warn") messageBox.classList.add('bg-yellow-600');
+            else messageBox.classList.add('bg-gray-700');
+            messageBox.style.display = 'block';
+            clearTimeout(messageTimeout);
+            if (duration > 0) { messageTimeout = setTimeout(hideMessage, duration); }
+        }
+        function hideMessage() { messageBox.style.display = 'none'; }
+        function showLoadingIndicator(show) { loadingIndicator.style.display = show ? 'flex' : 'none'; }
+
+        // --- Initialize ---
+        initThree(); // Call initThree first
+        // Initial state for mobile controls
+        if (window.innerWidth < 1024) { // lg breakpoint
+            controlsWrapper.classList.add('controls-hidden-mobile');
+            toggleIconOpen.classList.remove('hidden');
+            toggleIconClose.classList.add('hidden');
+            controlsVisibleOnMobile = false;
+        } else {
+            controlsWrapper.classList.remove('controls-hidden-mobile'); // Ensure visible on desktop
+            controlsVisibleOnMobile = true; // Or doesn't matter as it's not hidden
+        }
+        setControlsHeightVar(); // Set initial padding for main content
+
+        updateButtonStates(false, false);
+        imageScaleValue.textContent = `${parseFloat(imageScaleSlider.value).toFixed(2)}x`;
+        particleSizeValue.textContent = parseFloat(particleSizeSlider.value).toFixed(1);
+        particleDensityValue.textContent = densityLabels[parseInt(particleDensitySlider.value) - 1];
+        currentParticleType = particleTypeSelector.value;
+        currentImageScale = parseFloat(imageScaleSlider.value);
+    </script>
+</body>
+</html>
